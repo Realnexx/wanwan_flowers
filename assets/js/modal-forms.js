@@ -233,7 +233,13 @@
                     throw new Error('Your session has expired. Sign in again, then retry saving.');
                 }
                 if (response.status === 413) throw new Error('The server rejected the upload size. Try a smaller photo or ask your host to increase its upload limit.');
-                if (response.status === 403) throw new Error('The server denied this save request (HTTP 403). Refresh your session and check your account permissions.');
+                if (response.status === 403) {
+                    // Older deployments may still return the application's HTML access page.
+                    const deniedPage = new DOMParser().parseFromString(text, 'text/html');
+                    const reason = deniedPage.querySelector('.access-card .message');
+                    if (reason && reason.textContent.trim()) throw new Error(reason.textContent.trim());
+                    throw new Error('The server returned an HTML access-denied response (HTTP 403), rather than the application save response. Check the failed request in Network → Response to identify the hosting block or outdated server files.');
+                }
                 if (response.status >= 500) throw new Error('The server could not process this update (HTTP ' + response.status + '). Ask the administrator to check the hosting PHP error log.');
                 throw new Error(text && text.length < 500 && !text.includes('<')
                     ? text : 'The server returned an unexpected response (HTTP ' + response.status + '). The update could not be confirmed. Check the hosting error log and deployed form files.');
