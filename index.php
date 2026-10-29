@@ -1,4 +1,9 @@
 <?php
+$flowerRoute = $_GET['route'] ?? 'home';
+if (is_string($flowerRoute) && in_array($flowerRoute, ['home', 'products', 'pricing', 'about', 'contact', 'branches', 'flowers/detail', 'flowers/bag'], true) && !isset($_GET['init'])) {
+    require __DIR__ . '/views/website/flowers.php';
+    exit;
+}
 require_once __DIR__ . '/config/db.php';
 
 // Initialization is a manual CLI operation, never a public route.
