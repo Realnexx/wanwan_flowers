@@ -366,6 +366,7 @@ $is_admin = !empty($_SESSION['user']['role_name']) && in_array(strtolower($_SESS
                                                 </div>
                                                 <span style="font-size: 0.72rem; font-weight: 700; color: #334155;">Sellable</span>
                                             </label>
+                                            <?php $flowerFieldPrefix = ''; require __DIR__ . '/../partials/flower_product_fields.php'; ?>
                                             <label class="d-flex align-items-center gap-2 p-2"><input type="checkbox" name="show_on_website" id="show_on_website" value="1"> Show on website</label><label class="create-toggle-pill m-0" for="discountable_sw">
                                                 <div class="form-check form-switch p-0 m-0 d-flex align-items-center">
                                                     <input class="form-check-input m-0 shadow-none cursor-pointer" type="checkbox" name="is_discountable" checked id="discountable_sw">

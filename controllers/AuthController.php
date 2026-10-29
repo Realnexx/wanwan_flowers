@@ -61,7 +61,9 @@ class AuthController
         if($demo['is_demo'])$_SESSION['demo_notice_pending']=(int)$user['id'];else unset($_SESSION['demo_notice_pending']);
         Monitoring::security('login_success');User::set_status($user['id'],'online');User::log_activity($user['id'],'login','Signed in as '.$context['role']);
         if(!$context['staff']){require_once __DIR__.'/../models/Cart.php';Cart::migrate($guestSession,$user['id']);}
-        set_flash('success','You have signed in successfully.');redirect('?route='.User::landing_route($user['id']));
+        set_flash('success','You have signed in successfully.');
+        if (!$context['staff'] && !empty($_SESSION['flower_checkout_return'])) { unset($_SESSION['flower_checkout_return']); redirect('?route=flowers/checkout'); }
+        redirect('?route='.User::landing_route($user['id']));
     }
     private function factorLogin() {
         $pending=&$_SESSION['pending_mfa'];$user=User::find_by_id($pending['id']);$factorError='';
@@ -113,13 +115,16 @@ class AuthController
             $_SESSION['user']=['id'=>$user_id,'name'=>$username,'email'=>$email,'username'=>$username,'role'=>'Customer','branch_id'=>null];
             require_once __DIR__.'/../models/Cart.php';Cart::migrate($guestSession,$user_id);
             User::set_status($user_id,'online');User::log_activity($user_id,'register','Customer registered.');
-            set_flash('success','Your account is ready. Welcome!');redirect('?route=setup_profile');
+            set_flash('success','Your account is ready. Welcome!');
+            if (!empty($_SESSION['flower_checkout_return'])) { unset($_SESSION['flower_checkout_return']); redirect('?route=flowers/checkout'); }
+            redirect('?route=setup_profile');
         }
         require __DIR__.'/../views/auth/register.php';
     }
 
     public function forgot_password() {
         require_guest();enforce_csrf();
+        if (isset($_GET['new'])) unset($_SESSION['recovery_notice']);
         if($_SERVER['REQUEST_METHOD']==='POST') {
             $wait=AuthSecurity::consume('forgot-ip',AuthSecurity::ip(),10,3600);
             if($wait)return $this->auth_error('forgot_password','Too many requests. Please try again later.',429,$wait);
@@ -132,11 +137,11 @@ class AuthController
                 $token=AuthSecurity::issue_reset($user['id']);
                 try {
                     require_once __DIR__.'/../services/PasswordMailer.php';require_once __DIR__.'/../models/Setting.php';
-                    PasswordMailer::send_reset($email,$token,Setting::get('store_name','Burger shop'));
+                    PasswordMailer::send_reset($email,$token,'Wanwan Flowers');
                 } catch(Throwable $e) { AuthSecurity::revoke_reset($token);error_log('Password recovery email could not be delivered. Check SMTP configuration.'); }
             }
-            set_flash('success','If an account uses that email, you’ll receive a password reset link. Check your inbox and spam folder.');
-            redirect('?route=forgot_password');
+            $_SESSION['recovery_notice']=['email'=>$email];
+            redirect('?route=forgot_password&sent=1');
         }
         require __DIR__.'/../views/auth/forgot_password.php';
     }

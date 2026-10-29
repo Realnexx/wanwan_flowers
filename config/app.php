@@ -23,6 +23,21 @@ try {
     if (!is_string($base) || !preg_match('~^/(?:[A-Za-z0-9_-]+/)*$~D', $base)) {
         throw new RuntimeException('Base path must be / or a path such as /pos/.');
     }
+    // Local checkouts may live under a different folder than the saved deployment.
+    // Derive one shared base for forms, redirects, assets, and session cookies.
+    if ($appConfig['environment'] === 'local' && PHP_SAPI !== 'cli' && !empty($_SERVER['DOCUMENT_ROOT'])) {
+        $documentRoot = realpath($_SERVER['DOCUMENT_ROOT']);
+        $applicationRoot = realpath(__DIR__ . '/..');
+        if ($documentRoot && $applicationRoot) {
+            $documentRoot = rtrim(str_replace('\\', '/', $documentRoot), '/');
+            $applicationRoot = str_replace('\\', '/', $applicationRoot);
+            if (strcasecmp($applicationRoot, $documentRoot) === 0) $base = '/';
+            elseif (stripos($applicationRoot, $documentRoot . '/') === 0) {
+                $relative = substr($applicationRoot, strlen($documentRoot) + 1);
+                $base = '/' . implode('/', array_map('rawurlencode', explode('/', $relative))) . '/';
+            }
+        }
+    }
     define('APP_ENV', $appConfig['environment']);
     define('APP_BASE_PATH', $base);
     if (APP_ENV === 'local') {

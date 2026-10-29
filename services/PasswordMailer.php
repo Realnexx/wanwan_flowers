@@ -12,10 +12,16 @@ class PasswordMailer {
         return $mail;
     }
     public static function reset_url($token) {
-        global $appConfig;
-        $base=getenv('APP_PUBLIC_URL') ?: ($appConfig['public_url'] ?? self::settings()['public_url'] ?? '');
+        // Recovery links must point to the public site, even when sent locally.
+        $base=getenv('PASSWORD_RESET_PUBLIC_URL') ?: 'https://bookings.ct.ws/';
         if(!filter_var($base,FILTER_VALIDATE_URL) || !in_array(strtolower(parse_url($base,PHP_URL_SCHEME) ?? ''),APP_ENV==='local'?['http','https']:['https'],true) || parse_url($base,PHP_URL_QUERY) || parse_url($base,PHP_URL_FRAGMENT) || parse_url($base,PHP_URL_USER)) throw new RuntimeException('Set the trusted public_url before enabling recovery.');
         return rtrim($base,'/').'/?route=reset_password&token='.rawurlencode($token);
+    }
+    public static function reset_body($link,$brand='Wanwan Flowers',$minutes=30) {
+        $safe=htmlspecialchars($link,ENT_QUOTES,'UTF-8');
+        $name=htmlspecialchars($brand,ENT_QUOTES,'UTF-8');
+        $minutes=max(1,(int)$minutes);
+        ob_start();require __DIR__.'/templates/password_reset.php';return ob_get_clean();
     }
     public static function send_reset($email,$token,$brand) {
         $settings=self::settings();
@@ -24,9 +30,11 @@ class PasswordMailer {
         if(!in_array($encryption,['tls','ssl','none'],true) || ($encryption==='none' && APP_ENV!=='local'))throw new RuntimeException('Use encrypted SMTP in production.');
         $link=self::reset_url($token);$mail=new PHPMailer(true);$mail->isSMTP();$mail->Host=$settings['host'];$mail->Port=(int)($settings['port'] ?? 587);$mail->SMTPAuth=!empty($settings['username']);$mail->Username=$settings['username'] ?? '';$mail->Password=$settings['password'] ?? '';
         $mail->SMTPSecure=$encryption==='none'?'':$encryption;$mail->SMTPAutoTLS=$encryption!=='none';$mail->Timeout=10;$mail->SMTPDebug=0;$mail->CharSet='UTF-8';$mail->setFrom($settings['from_email'],$settings['from_name'] ?? $brand);$mail->addAddress($email);$mail->Subject='Reset your password - '.$brand;
-        $safe=htmlspecialchars($link,ENT_QUOTES,'UTF-8');$name=htmlspecialchars($brand,ENT_QUOTES,'UTF-8');
-        $mail->isHTML(true);$mail->Body='<div style="font-family:Arial,sans-serif;max-width:560px;padding:32px;background:#fff8eb;color:#30251e"><h2 style="color:#bc2923">'.$name.'</h2><h1>Reset your password</h1><p>Use the link below to choose a new password. It expires in 30 minutes and can be used once.</p><p><a style="display:inline-block;background:#bc2923;color:#fff8eb;padding:14px 22px;text-decoration:none;border-radius:6px" href="'.$safe.'">Choose a new password</a></p><p>If you did not request this, you can ignore this email.</p></div>';
-        $mail->AltBody="Reset your password: ".$link."\nThis link expires in 30 minutes and can be used once. If you did not request this, ignore this email.";
+        require_once __DIR__.'/../models/AuthSecurity.php';
+        $minutes = (int)ceil(AuthSecurity::config()['reset_lifetime']/60);
+        $mail->isHTML(true);
+        $mail->Body=self::reset_body($link,$brand,$minutes);
+        $mail->AltBody=$brand."\n\nReset your password: ".$link."\nThis link expires in ".$minutes." minutes and can be used once. If you did not request this, you can safely ignore this email. Your password will stay the same.";
         $mail->send();
     }
 }

@@ -7,3 +7,145 @@
 
 
 .shop-form .demo-request-consent{display:flex;flex-direction:row;align-items:flex-start;gap:10px;line-height:1.6;cursor:pointer}.shop-form .demo-request-consent input[type=checkbox]{appearance:auto;flex:0 0 16px;width:16px;height:16px;min-width:16px;padding:0;margin:3px 0 0;accent-color:var(--red)}.shop-form .demo-request-consent span{flex:1;min-width:0}
+
+/* Wanwan Flowers cohesive editorial theme & compact layout for secondary storefront pages */
+:root {
+  --cream: #fffcf8;
+  --red: #a6466c;
+  --ink: #1e3566;
+  --muted: #5a657d;
+  --line: #e4dde3;
+  --yellow: #f8e8ee;
+  --display: 'Playfair Display', Georgia, serif;
+}
+
+body.burger-home {
+  background:
+    radial-gradient(circle at 12% 15%, rgba(248, 232, 238, 0.65) 0%, transparent 45%),
+    radial-gradient(circle at 88% 85%, rgba(223, 232, 243, 0.55) 0%, transparent 45%),
+    var(--cream);
+  color: var(--ink);
+}
+
+.top-strip {
+  background: var(--ink);
+  color: #fff;
+  font-size: 11px;
+  padding: 8px 20px;
+}
+
+.site-header {
+  background: rgba(255, 252, 248, 0.9);
+  backdrop-filter: blur(18px);
+}
+
+.nav-row {
+  height: 72px;
+}
+
+.brand {
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.brand-symbol {
+  color: var(--red);
+}
+
+.inner-page {
+  padding-block: 36px 56px;
+}
+
+.page-intro {
+  margin-bottom: 28px;
+}
+
+.page-intro h1,
+.detail-copy h1,
+.shop-panel h2,
+[data-demo-motion] .shop-panel > h2,
+[data-demo-motion] .demo-overview-intro h2 {
+  font-family: var(--display);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.page-intro h1,
+.detail-copy h1 {
+  font-size: clamp(32px, 4.2vw, 48px);
+  line-height: 1.08;
+  margin-bottom: 12px;
+}
+
+.shop-panel h2,
+[data-demo-motion] .shop-panel > h2,
+[data-demo-motion] .demo-overview-intro h2 {
+  font-size: clamp(24px, 2.6vw, 32px);
+  line-height: 1.15;
+}
+
+.shop-panel,
+[data-demo-motion] .shop-panel,
+.cart-item {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 24px 26px;
+  box-shadow: 0 12px 32px rgba(30, 53, 102, 0.06);
+}
+
+[data-demo-motion] .demo-overview {
+  background: linear-gradient(145deg, #f9ebf1 0%, #eef3fa 100%);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 24px 26px;
+}
+
+.shop-form {
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.form-pair {
+  gap: 14px;
+}
+
+.menu-search input[type=search],
+.shop-form input:not([type=hidden]):not([type=checkbox]),
+.shop-form select,
+.shop-form textarea,
+[data-demo-motion] .shop-form input:not([type=hidden]):not([type=checkbox]),
+[data-demo-motion] .shop-form select,
+[data-demo-motion] .shop-form textarea {
+  background: #fff;
+  border: 1px solid #d8dbe6;
+  border-radius: 10px;
+  padding: 10px 13px;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.shop-form textarea {
+  min-height: 96px;
+}
+
+.button {
+  border-radius: 999px;
+  padding: 12px 22px;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.button-red {
+  background: var(--ink);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(30, 53, 102, 0.16);
+}
+
+.button-red:hover {
+  background: #2c4a8a;
+}
+

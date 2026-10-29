@@ -26,7 +26,7 @@ class User {
     public static function has_all_branch_access($id) { return self::access_context($id)['global']; }
     public static function landing_route($id) {
         $context = self::access_context($id);
-        if (!$context['staff']) return 'home';
+        if (!$context['staff']) return 'customer/home';
         if (($context['global'] || $context['branch_id']) && self::has_permission($id, 'view_dashboard')) return 'dashboard';
         return 'admin/start';
     }

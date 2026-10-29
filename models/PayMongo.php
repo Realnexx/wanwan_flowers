@@ -72,14 +72,10 @@ class PayMongo {
         $sameAccount=$old && $old['mode']===$mode && hash_equals(self::decrypt($old['secret_cipher']),$secret);
         $webhook=$webhook!==''?$webhook:($sameAccount?self::decrypt($old['webhook_cipher']):'');
         if(!preg_match('/^sk_'.$mode.'_[A-Za-z0-9]{8,240}$/D',$secret)||!preg_match('/^pk_'.$mode.'_[A-Za-z0-9]{8,240}$/D',$public))throw new DomainException('Enter valid public and secret keys for the same selected mode.');
-        if($webhook!=='' && (!preg_match('/^[A-Za-z0-9_\-]{8,255}$/D',$webhook)))throw new DomainException('Enter a valid webhook signing secret.');
         $site=self::applicationUrl();
-        $activationDeferred=$enable && parse_url($site,PHP_URL_SCHEME)!=='https';
-        if($activationDeferred)$enable=false;
         if($old && ($old['mode']!==$mode || !hash_equals(self::decrypt($old['secret_cipher']),$secret) || $old['public_key']!==$public) && RecipeInventory::rows("SELECT id FROM paymongo_payments WHERE state IN ('creating','pending','review') LIMIT 1"))throw new DomainException('Reconcile or expire outstanding checkouts before changing payment keys or mode.');
         $methods=self::parseMethods(self::request('GET','/v1/merchants/capabilities/payment_methods',$secret));
         if($enable && !$methods)throw new DomainException('No active payment methods were found. Activate methods in PayMongo before enabling payments.');
-        if($enable && trim($input['webhook_secret']??'')==='')$webhook=self::connectWebhook($secret,$site,$mode);
         RecipeInventory::atomic(function()use($actor,$mode,$enable,$secret,$public,$webhook,$site,$methods){
             $current=RecipeInventory::rows('SELECT * FROM paymongo_config WHERE id=1 FOR UPDATE')[0]??null;
             if($current && ($current['mode']!==$mode || !hash_equals(self::decrypt($current['secret_cipher']),$secret) || $current['public_key']!==$public) && RecipeInventory::rows("SELECT id FROM paymongo_payments WHERE state IN ('creating','pending','review') LIMIT 1"))throw new DomainException('Reconcile or expire outstanding checkouts before changing payment keys or mode.');
@@ -87,7 +83,7 @@ class PayMongo {
             RecipeInventory::query('UPDATE paymongo_methods SET available=0 WHERE mode=?','s',[$mode]);
             foreach($methods as $code)RecipeInventory::query('INSERT INTO paymongo_methods(mode,code,label,available) VALUES(?,?,?,1) ON DUPLICATE KEY UPDATE label=VALUES(label),available=1,synced_at=NOW()','sss',[$mode,$code,self::label($code)]);
         });
-        return $activationDeferred?'Keys checked and payment methods synchronized. Online payments remain disabled because this site uses HTTP. Enable them after opening the application at its public HTTPS address.':null;
+        return null;
     }
     private static function connectWebhook($secret,$site,$mode){
         $url=$site.'ajax/paymongo_webhook.php';$hooks=self::request('GET','/v1/webhooks',$secret)['data']??[];$hook=null;
@@ -112,8 +108,12 @@ class PayMongo {
             if(!$order || !in_array($order['status'],['pending','preparing','ready'],true)||!in_array($order['payment_status'],['unpaid','processing'],true))throw new DomainException('This order cannot accept an online payment.');
             $prior=RecipeInventory::rows('SELECT * FROM paymongo_payments WHERE active_order_id=? FOR UPDATE','i',[$order['id']]);if($prior)return $prior[0];
             $amount=self::cents($order['total']);if($amount<100)throw new DomainException('This order must be paid at the counter.');
-            $return=$c['site_url'].'?route=order_tracking&tracking='.rawurlencode($tracking);
+            $return=$c['site_url'].'?route='.(($order['fulfillment_type']??'pickup')==='delivery'?'flowers/order':'order_tracking').'&tracking='.rawurlencode($tracking);
             $methods=array_column(RecipeInventory::rows('SELECT code FROM paymongo_methods WHERE mode=? AND available=1 ORDER BY code','s',[$c['mode']]),'code');
+            if (($order['payment_choice'] ?? '') === 'qrph') {
+                if (!in_array('qrph', $methods, true)) throw new DomainException('QR Ph is not available for this account.');
+                $methods = ['qrph'];
+            }
             $payload=['data'=>['attributes'=>['line_items'=>[['name'=>'Order '.$tracking,'amount'=>$amount,'currency'=>'PHP','quantity'=>1]],'payment_method_types'=>$methods,'reference_number'=>$tracking,'metadata'=>['order_id'=>(string)$order['id']],'billing'=>['name'=>$order['customer_name'],'email'=>$order['email'],'phone'=>$order['phone']],'send_email_receipt'=>true,'pass_on_fees'=>false,'success_url'=>$return.'&payment_return=1','cancel_url'=>$return.'&payment_cancelled=1']]];
             RecipeInventory::query('INSERT INTO paymongo_payments(order_id,branch_id,active_order_id,request_key,amount_cents,mode,secret_cipher,webhook_cipher,request_payload) VALUES(?,?,?,?,?,?,?,?,?)','iiisissss',[$order['id'],$order['branch_id'],$order['id'],bin2hex(random_bytes(32)),$amount,$c['mode'],$c['secret_cipher'],$c['webhook_cipher'],json_encode($payload,JSON_THROW_ON_ERROR)]);
             $id=$conn->insert_id;RecipeInventory::query("UPDATE online_orders SET payment_status='processing' WHERE id=?",'i',[$order['id']]);return RecipeInventory::rows('SELECT * FROM paymongo_payments WHERE id=?','i',[$id])[0];

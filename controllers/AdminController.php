@@ -497,7 +497,7 @@ class AdminController {
                 redirect('?route=admin/settings&tab='.$category);
             }
             if(!in_array($category,['general','appearance'],true)){set_flash('danger','Unknown settings category.');redirect('?route=admin/settings');}
-            $allowed=$category==='general'?['store_name','store_address','store_phone','store_email','store_logo','online_ordering_enabled','store_phone_alt','founder_name','founder_title','founder_quote','expansion_milestone']:['primary_color','secondary_color','font_family','theme','dark_mode','sidebar_color','layout_mode'];
+            $allowed=$category==='general'?['store_name','store_address','store_phone','store_email','store_logo','online_ordering_enabled','flower_delivery_fee','store_phone_alt','founder_name','founder_title','founder_quote','expansion_milestone']:['primary_color','secondary_color','font_family','theme','dark_mode','sidebar_color','layout_mode'];
             $data=array_intersect_key($data,array_flip($allowed));
             if(isset($data['online_ordering_enabled']))$data['online_ordering_enabled']=$data['online_ordering_enabled']==='1'?'1':'0';
             // Handle logo upload if present
@@ -511,6 +511,10 @@ class AdminController {
                 }
             }
 
+            if (isset($data['flower_delivery_fee']) && (!is_string($data['flower_delivery_fee']) || !preg_match('/^\d{1,6}(?:\.\d{1,2})?$/D', $data['flower_delivery_fee']))) {
+                set_flash('danger','Enter a valid flower delivery fee with up to two decimal places.');
+                redirect('?route=admin/settings&tab=general');
+            }
             Setting::update_all($data, $category);
             User::log_activity($_SESSION['user']['id'], 'SETTINGS_UPDATE', 'Updated settings category: ' . $category);
             ActivityLog::log('Settings Updated', 'Updated settings category: ' . $category);

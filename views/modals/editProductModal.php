@@ -388,6 +388,7 @@
                                                 </div>
                                                 <span style="font-size: 0.72rem; font-weight: 700; color: #334155;">Sellable</span>
                                             </label>
+                                            <?php $flowerFieldPrefix = 'edit_'; require __DIR__ . '/../partials/flower_product_fields.php'; ?>
                                             <label class="d-flex align-items-center gap-2 p-2"><input type="checkbox" name="show_on_website" id="edit_show_on_website" value="1"> Show on website</label><label class="edit-toggle-pill m-0" for="edit_is_discountable">
                                                 <div class="form-check form-switch p-0 m-0 d-flex align-items-center">
                                                     <input class="form-check-input m-0 shadow-none cursor-pointer" type="checkbox" name="is_discountable" id="edit_is_discountable">
