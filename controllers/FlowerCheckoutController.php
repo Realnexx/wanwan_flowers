@@ -12,9 +12,10 @@ $checkoutErrors=[];$checkoutMessage='';$checkoutOrder=null;$checkoutQuote=null;
 $checkoutBranches=RecipeInventory::rows("SELECT id,name FROM branches WHERE status='Active' ORDER BY id");
 $checkoutData=$_SESSION['flower_checkout_draft']['data']??['name'=>$_SESSION['user']['name']??'','email'=>$_SESSION['user']['email']??'','gift_note'=>$_SESSION['flower_gift_note']??''];
 if ($checkoutUser && empty($_SESSION['flower_checkout_draft'])) {
-    $profile=User::find_by_id($checkoutUser);
+    $profile=Psgc::customerAddress($checkoutUser);
     foreach(['address','city','psgc_region','psgc_province','psgc_city','psgc_barangay'] as $field) $checkoutData[$field]=$profile[$field]??'';
     $checkoutData['postal_code']=$profile['zip']??'';
+    if (!empty($profile['phone'])) $checkoutData['phone']=$profile['phone'];
 }
 $qrAvailable=FlowerCheckout::qrAvailable();
 if ($_SERVER['REQUEST_METHOD']==='POST' && (!is_string($_POST['token']??null)||!hash_equals($_SESSION['flower_csrf'],$_POST['token']))) {
@@ -49,8 +50,16 @@ if ($flowerRoute==='flowers/order') {
         }
         redirect('?route=flowers/bag');
     }
+    $checkoutBranches=FlowerCheckout::dispatchBranches($_SESSION['flower_bag']);
+    $dispatchId=(int)($checkoutBranches[0]['id']??0);
+    $checkoutData['branch_id']=$dispatchId?(string)$dispatchId:'';
+    if ($flowerRoute==='flowers/checkout') $checkoutData=array_merge($checkoutData,FlowerCheckout::deliveryEstimate());
+    if (!$dispatchId) $checkoutMessage='No single branch currently has enough stock for your bag. Please adjust the quantities or contact the shop.';
     if ($flowerRoute==='flowers/checkout' && $_SERVER['REQUEST_METHOD']==='POST') {
-        [$checkoutData,$checkoutErrors]=FlowerCheckout::validate($_POST);
+        $checkoutInput=$_POST;
+        $checkoutInput['branch_id']=$dispatchId?(string)$dispatchId:'';
+        [$checkoutData,$checkoutErrors]=FlowerCheckout::validate($checkoutInput);
+        if (!$dispatchId) $checkoutErrors['branch_id']='No branch can fulfill all items in your bag right now.';
         if (!$checkoutUser && !$checkoutErrors && User::find_by_email(strtolower($checkoutData['email']))) {
             $checkoutErrors['email']='Already have an account with this email? Sign in to continue, or use a different email.';
             $_SESSION['flower_checkout_return']=true;

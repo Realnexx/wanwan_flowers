@@ -64,10 +64,15 @@ class OnlineOrder {
         $order=$staff?"CASE WHEN o.status IN ('pending','preparing','ready') THEN 0 ELSE 1 END,o.id DESC":'o.id DESC';
         return RecipeInventory::rows('SELECT o.*,b.name branch_name FROM online_orders o LEFT JOIN branches b ON b.id=o.branch_id WHERE '.$where.' ORDER BY '.$order.' LIMIT 200');
     }
-    public static function update_status($id,$status,$actor,$payment='Cash') {
+    public static function board_targets(array $order,int $actor): array {
+        $next=['pending'=>['preparing'],'preparing'=>['ready'],'ready'=>['completed']];
+        return array_values(array_filter($next[$order['status']]??[],static function($status)use($order,$actor){return self::can_action($actor,$status)&&($status!=='completed'||$order['payment_status']==='paid');}));
+    }
+    public static function update_status($id,$status,$actor,$payment='Cash',$expectedStatus=null) {
         if((int)($_SESSION['user']['id'] ?? 0)!==(int)$actor || !self::can_action($actor,$status))throw new DomainException('You do not have permission for this online order action.');
-        return RecipeInventory::atomic(function()use($id,$status,$actor,$payment){
+        return RecipeInventory::atomic(function()use($id,$status,$actor,$payment,$expectedStatus){
             global $conn;$rows=RecipeInventory::rows('SELECT * FROM online_orders WHERE id=? FOR UPDATE','i',[$id]);if(!$rows)throw new DomainException('Order not found.');$order=$rows[0];RecipeInventory::branch($order['branch_id']);
+            if ($expectedStatus!==null && $order['status']!==$expectedStatus) throw new DomainException('This order changed since you opened it. Refresh the board and try again.');
             if($status==='paid') {
                 if(!User::has_permission($actor,'access_pos'))throw new DomainException('You cannot record payments.');
                 if($order['payment_status']==='paid')return $order;

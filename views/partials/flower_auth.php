@@ -8,6 +8,7 @@ $isReset = $authMode === 'reset_password';
 $isTwoFactor = $authMode === 'two_factor';
 $escape = static function ($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); };
 $flash = get_flash();
+$authToastNotice=$flash;
 require_once __DIR__ . '/../../models/FlowerCatalog.php';
 $authFlowers = FlowerCatalog::products($conn);
 $authFlower = reset($authFlowers);
@@ -415,5 +416,6 @@ $pageTitles = [
     <span>A little flower. A lovely kind of day. <i class="fa-regular fa-heart" aria-hidden="true"></i></span>
 </footer>
 <script src="<?= url('assets/js/auth-forms.js') ?>?v=<?= filemtime(__DIR__ . '/../../assets/js/auth-forms.js') ?>" defer></script>
+<?php $globalToastMessages=$authToastNotice?[$authToastNotice]:[];require __DIR__.'/global_toasts.php'; ?>
 </body>
 </html>

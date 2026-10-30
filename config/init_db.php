@@ -214,6 +214,7 @@ $columns_to_add = [
     'province' => 'VARCHAR(100) NULL',
     'country' => 'VARCHAR(100) NULL',
     'zip' => 'VARCHAR(20) NULL',
+    'phone' => 'VARCHAR(40) NULL',
     'store' => 'VARCHAR(100) NULL',
     'avatar_url' => 'VARCHAR(255) NULL'
 ];

@@ -27,7 +27,8 @@ $occasionImage = static function ($occasion) use ($flowers, $heroFlower) {
 $minimumPrice = $flowers ? min(array_column($flowers, 'price')) : null;
 
 // Remove unpublished or deleted products from saved selections.
-$_SESSION['flower_bag'] = array_intersect_key($_SESSION['flower_bag'] ?? [], $flowers);
+require_once __DIR__.'/../../models/FlowerBag.php';
+FlowerBag::load($flowers);
 
 
 $img = static function ($id, $width = 900) {
@@ -53,27 +54,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isCustomerArea && !in_array($flow
     if (isset($_POST['gift_note']) && is_string($_POST['gift_note'])) {
         $_SESSION['flower_gift_note'] = mb_substr(trim($_POST['gift_note']), 0, 280);
     }
-    if (isset($flowers[$id])) {
-        if ($action === 'remove') {
-            unset($_SESSION['flower_bag'][$id]);
-        } elseif ($action === 'set_quantity') {
-            $quantity = filter_var($_POST['qty'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 20]]);
-            if ($quantity === false || $quantity === null) {
-                http_response_code(422);
-                exit('Enter a whole quantity between 1 and 20.');
+    try {
+        if (isset($flowers[$id])) {
+            $quantity=1;
+            if ($action==='set_quantity') {
+                $quantity=filter_var($_POST['qty']??null,FILTER_VALIDATE_INT,['options'=>['min_range'=>1,'max_range'=>20]]);
+                if ($quantity===false || $quantity===null) throw new DomainException('Enter a whole quantity between 1 and 20.');
+            } elseif (!in_array($action,['remove','decrease'],true)) {
+                $quantity=max(1,min(10,(int)($_POST['qty']??1)));
             }
-            $_SESSION['flower_bag'][$id] = $quantity;
-        } elseif ($action === 'decrease') {
-            $nextQty = ($_SESSION['flower_bag'][$id] ?? 1) - 1;
-            if ($nextQty <= 0) {
-                unset($_SESSION['flower_bag'][$id]);
-            } else {
-                $_SESSION['flower_bag'][$id] = $nextQty;
-            }
-        } else {
-            $addQty = max(1, min(10, (int)($_POST['qty'] ?? 1)));
-            $_SESSION['flower_bag'][$id] = min(20, ($_SESSION['flower_bag'][$id] ?? 0) + $addQty);
+            FlowerBag::change($id,$action,$quantity,$flowers);
         }
+    } catch (Throwable $error) {
+        http_response_code($error instanceof DomainException?422:503);
+        $message=$error instanceof DomainException?$error->getMessage():'Could not save your bag. Please try again.';
+        if (($_SERVER['HTTP_ACCEPT']??'')==='application/json') {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error'=>$message]);exit;
+        }
+        exit($e($message));
     }
     if (($_SERVER['HTTP_ACCEPT'] ?? '') === 'application/json') {
         header('Content-Type: application/json; charset=utf-8');
@@ -86,6 +85,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isCustomerArea && !in_array($flow
 
 $bag = $_SESSION['flower_bag'] ?? [];
 $count = array_sum($bag);
+$activeOrderCount=0;
+if (!empty($_SESSION['user']['id'])) {
+    $activeOrderCount=(int)RecipeInventory::rows("SELECT COUNT(*) total FROM online_orders WHERE user_id=? AND status IN ('pending','preparing','ready')",'i',[(int)$_SESSION['user']['id']])[0]['total'];
+}
 $giftNote = $_SESSION['flower_gift_note'] ?? '';
 
 $titles = [
@@ -101,6 +104,7 @@ $titles = [
     'flowers/place-order' => 'Review & place your order',
     'flowers/order' => 'Your order',
     'customer/home'=>'Your Wanwan', 'customer/orders'=>'My orders', 'customer/history'=>'Order history', 'customer/profile'=>'My profile',
+    'customer/receipt'=>'Order receipt',
 ];
 
 $csrf = $_SESSION['flower_csrf'];
@@ -154,8 +158,9 @@ $card = static function ($id, $p) use ($e, $img, $csrf) {
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="assets/css/flowers.css?v=<?= @filemtime(__DIR__ . '/../../assets/css/flowers.css') ?: 2 ?>">
+<?php if (!empty($_SESSION['user']['id'])): ?><link rel="stylesheet" href="assets/css/customer-portal.css?v=<?= filemtime(__DIR__.'/../../assets/css/customer-portal.css') ?>"><?php endif; ?>
 </head>
-<body class="<?= !empty($_SESSION['user']['id']) ? 'customer-signed-in' : '' ?>">
+<body class="<?= !empty($_SESSION['user']['id']) ? 'customer-signed-in'.(in_array($flowerRoute, ['products','pricing'],true)?' customer-explore-page':'').(in_array($flowerRoute, ['flowers/checkout','flowers/place-order','flowers/order'],true)?' customer-checkout-page':'') : '' ?>">
 <a class="skip" href="#main">Skip to content</a>
 
 <div class="announcement">
@@ -214,9 +219,11 @@ $card = static function ($id, $p) use ($e, $img, $csrf) {
 <?php endif; ?>
 <div class="bag-feedback" role="status" aria-live="polite"></div>
 
-<?php if (!empty($_SESSION['user']['id'])): ?><nav class="customer-bottom-nav" aria-label="Customer navigation"><?php foreach (['home'=>['Home','fa-house'],'customer/orders'=>['My orders','fa-bag-shopping'],'customer/history'=>['History','fa-clock-rotate-left'],'flowers/bag'=>['Bag','fa-basket-shopping'],'customer/profile'=>['Profile','fa-user']] as $navRoute=>$navItem): ?><a href="?route=<?= $navRoute ?>" <?= $flowerRoute===$navRoute?'aria-current="page"':'' ?>><i class="fa-solid <?= $navItem[1] ?>" aria-hidden="true"></i><span><?= $navItem[0] ?><?php if($navRoute==='flowers/bag'): ?><span class="customer-nav-bag-count"><?= $count>0?' ('.$count.')':'' ?></span><?php endif; ?></span></a><?php endforeach; ?></nav><?php endif; ?>
+<?php if (!empty($_SESSION['user']['id'])): ?><nav class="customer-bottom-nav" aria-label="Customer navigation"><?php foreach (['customer/home'=>['Home','fa-house'],'customer/orders'=>['My orders','fa-bag-shopping'],'customer/history'=>['History','fa-clock-rotate-left'],'flowers/bag'=>['Bag','fa-basket-shopping'],'customer/profile'=>['Profile','fa-user']] as $navRoute=>$navItem): ?><a href="?route=<?= $navRoute ?>" <?= $flowerRoute===$navRoute?'aria-current="page"':'' ?>><span class="customer-nav-icon"><i class="fa-solid <?= $navItem[1] ?>" aria-hidden="true"></i><?php if($navRoute==='customer/orders' && $activeOrderCount>0): ?><span class="customer-nav-order-count" aria-label="<?= $activeOrderCount ?> active orders"><?= $activeOrderCount ?></span><?php endif; ?><?php if($navRoute==='flowers/bag'): ?><span class="customer-nav-bag-count" aria-live="polite" <?= $count>0?'':'hidden' ?>><?= $count ?></span><?php endif; ?></span><span><?= $navItem[0] ?></span></a><?php endforeach; ?></nav><?php endif; ?>
 <main id="main">
-<?php if ($isCustomerArea): ?>
+<?php if ($flowerRoute==='customer/receipt'): ?>
+    <?php require __DIR__.'/customer_receipt.php'; ?>
+<?php elseif ($isCustomerArea): ?>
     <?php require __DIR__.'/customer_area.php'; ?>
 <?php elseif (in_array($flowerRoute, ['flowers/checkout','flowers/place-order','flowers/order'], true)): ?>
     <?php require __DIR__.'/flower_checkout.php'; ?>
@@ -496,6 +503,7 @@ $card = static function ($id, $p) use ($e, $img, $csrf) {
         'Sympathy' => 'fa-dove',
     ];
 ?>
+    <?php if (!empty($_SESSION['user']['id'])): ?><header class="customer-explore-bar"><a href="?route=customer/home" class="explore-back" aria-label="Back to customer home"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></a><div><h1>Explore flowers</h1><p>Find your next little lovely.</p></div><a class="customer-explore-bag" href="?route=flowers/bag" aria-label="View your bag"><i class="fa-solid fa-basket-shopping" aria-hidden="true"></i><span class="customer-nav-bag-count" aria-live="polite" <?= $count>0?'':'hidden' ?>><?= $count ?></span></a></header><?php endif; ?>
     <section class="catalog-hero">
         <div class="catalog-hero-inner">
             <div class="catalog-hero-copy">
@@ -574,7 +582,7 @@ $card = static function ($id, $p) use ($e, $img, $csrf) {
     <section class="section catalog" id="catalog-section">
         <!-- Mobile Sticky Filter & Search Trigger Bar (visible <= 820px) -->
         <div class="catalog-mobile-bar" aria-label="Mobile catalog controls">
-            <button type="button" class="mobile-filter-trigger" id="mobile-filter-open" aria-haspopup="dialog" aria-expanded="false" aria-controls="catalog-tools">
+            <button type="button" class="mobile-filter-trigger" id="mobile-filter-open" aria-label="Filters and budget" aria-haspopup="dialog" aria-expanded="false" aria-controls="catalog-tools">
                 <i class="fa-solid fa-sliders" aria-hidden="true"></i>
                 <span>Filters &amp; Budget</span>
                 <small class="mobile-filter-badge" id="mobile-filter-badge" <?= $initialFilterCount > 0 ? '' : 'hidden' ?>><?= (int)$initialFilterCount ?></small>
@@ -919,10 +927,10 @@ $card = static function ($id, $p) use ($e, $img, $csrf) {
     <?php endif; ?>
 
 <?php elseif ($flowerRoute === 'flowers/bag'): ?>
-    <section class="page-heading">
+    <section class="page-heading bag-page-heading">
         <div class="eyebrow"><span></span> GOOD FEELINGS, GATHERED</div>
-        <h1>Your bag of <em>happiness.</em></h1>
-        <p>Review your chosen bouquets and prepare your order with our studio.</p>
+        <h1><?= !empty($_SESSION['user']['id']) ? 'My bag <span class="bag-heading-count">'.(int)$count.'</span>' : 'Your bag of <em>happiness.</em>' ?></h1>
+        <p>Your lovely picks, ready when you are.</p>
     </section>
 
     <section class="section bag">
@@ -1272,6 +1280,17 @@ $card = static function ($id, $p) use ($e, $img, $csrf) {
         <span>Bloom a little. Feel a lot. <i class="fa-regular fa-heart" aria-hidden="true"></i></span>
     </div>
 </footer>
+<?php
+$globalToastMessages=[];
+$toastNotice=$customerNotice??get_flash();
+if ($toastNotice) $globalToastMessages[]=$toastNotice;
+if (!empty($customerError)) $globalToastMessages[]=['type'=>'danger','message'=>$customerError];
+require __DIR__.'/../partials/global_toasts.php';
+?>
+<?php if (!empty($_SESSION['user']['id'])): ?>
+<?php require __DIR__.'/../partials/customer_signout_modal.php'; ?>
+<script src="assets/js/customer-signout.js?v=<?= filemtime(__DIR__.'/../../assets/js/customer-signout.js') ?>" defer></script>
+<?php endif; ?>
 <script src="assets/js/flowers.js?v=<?= @filemtime(__DIR__ . '/../../assets/js/flowers.js') ?: 2 ?>" defer></script>
 </body>
 </html>

@@ -36,4 +36,23 @@ class Psgc
     public static function formatted(array $details): string {
         return implode(', ',array_filter([$details['address']??'',$details['barangay']??'',$details['city']??'',$details['province']??'',$details['region']??'',$details['postal_code']??$details['zip']??'']));
     }
+    public static function customerAddress(int $userId): array {
+        // Prefer the saved profile; older customers may only have an order address.
+        $profile=User::find_by_id($userId);
+        if (!$profile) return [];
+        [$names,$errors]=self::validate($profile);
+        if (!$errors) return array_merge($profile,$names,['postal_code'=>$profile['zip']??'']);
+        $orders=RecipeInventory::rows("SELECT delivery_details FROM online_orders WHERE user_id=? AND fulfillment_type='delivery' AND delivery_details IS NOT NULL ORDER BY id DESC LIMIT 10",'i',[$userId]);
+        foreach($orders as $order) {
+            $address=json_decode($order['delivery_details'],true);
+            if (!is_array($address)) continue;
+            [$names,$errors]=self::validate($address);
+            if ($errors) continue;
+            // Copy only address fields, retaining the account's identity and email.
+            $saved=array_intersect_key(array_merge($address,$names),array_flip(['address','region','province','city','barangay','postal_code','psgc_region','psgc_province','psgc_city','psgc_barangay']));
+            $saved['zip']=$saved['postal_code']??'';
+            return array_merge($profile,$saved);
+        }
+        return array_merge($profile,$names,['postal_code'=>$profile['zip']??'']);
+    }
 }

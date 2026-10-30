@@ -546,6 +546,21 @@ document.querySelector('#copy-enquiry')?.addEventListener('click', async () => {
 
 // Save before celebrating: the bag animation only runs after a confirmed update.
 const floatingBag = document.querySelector('.mobile-view-bag');
+function bagAnimationTarget() {
+  // Prefer the customer dock on both desktop and mobile, then visible fallbacks.
+  const candidates = [
+    document.querySelector('.customer-bottom-nav a[href="?route=flowers/bag"] .customer-nav-icon'),
+    document.querySelector('.customer-explore-bag'),
+    ...(matchMedia('(max-width: 820px)').matches
+      ? [floatingBag, document.querySelector('.bag-link')]
+      : [document.querySelector('.bag-link'), floatingBag])
+  ];
+  return candidates.find(node => {
+    if (!node) return false;
+    const rect = node.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight;
+  });
+}
 const bagFeedback = document.querySelector('.bag-feedback');
 let bagFeedbackTimer;
 document.querySelectorAll('.quick-add-form, .detail-form').forEach(form => {
@@ -562,18 +577,21 @@ document.querySelectorAll('.quick-add-form, .detail-form').forEach(form => {
       const result = await response.json();
       if (!Number.isInteger(result.count)) throw new Error('Invalid bag response');
       document.querySelectorAll('.bag-count, .mobile-bag-count').forEach(node => node.textContent = result.count);
-      document.querySelectorAll('.customer-nav-bag-count').forEach(node => node.textContent = result.count > 0 ? ` (${result.count})` : '');
-      document.querySelectorAll('.bag-link').forEach(node => {
+      document.querySelectorAll('.customer-nav-bag-count').forEach(node => {
+        node.textContent = result.count;
+        node.hidden = result.count === 0;
+      });
+      document.querySelectorAll('.bag-link, .customer-explore-bag, .customer-bottom-nav a[href="?route=flowers/bag"]').forEach(node => {
         node.classList.toggle('has-items', result.count > 0);
         node.setAttribute('aria-label', `Shopping bag, ${result.count} items`);
       });
       if (floatingBag) floatingBag.hidden = result.count === 0;
-      const target = matchMedia('(max-width: 820px)').matches ? (floatingBag || document.querySelector('.customer-bottom-nav a[href="?route=flowers/bag"]')) : document.querySelector('.bag-link');
+      const target = bagAnimationTarget();
       if (!motionPreference.matches && target && button && Element.prototype.animate) {
         const start = button.getBoundingClientRect();
         const end = target.getBoundingClientRect();
         const flower = document.createElement('span');
-        flower.className = 'flying-flower'; flower.innerHTML = '<i class="fa-solid fa-seedling" aria-hidden="true"></i>';  flower.setAttribute('aria-hidden', 'true');
+        flower.className = 'flying-flower'; flower.innerHTML = '<i class="fa-solid fa-seedling" aria-hidden="true"></i>'; flower.setAttribute('aria-hidden', 'true');
         flower.style.left = `${start.left + start.width / 2 - 22}px`;
         flower.style.top = `${start.top + start.height / 2 - 22}px`;
         document.body.appendChild(flower);
@@ -600,144 +618,18 @@ document.querySelectorAll('.quick-add-form, .detail-form').forEach(form => {
   });
 });
 
-// Reserve the actual fixed-header height, including font loads and rotation.
-const fixedMobileHeader = document.querySelector('.header');
-if (fixedMobileHeader) {
-  const measureMobileHeader = () => document.documentElement.style.setProperty('--mobile-header-height', `${Math.ceil(fixedMobileHeader.getBoundingClientRect().height)}px`);
-  measureMobileHeader();
-  if ('ResizeObserver' in window) new ResizeObserver(measureMobileHeader).observe(fixedMobileHeader);
-  else window.addEventListener('resize', measureMobileHeader, { passive: true });
-}
-
-// Direct quantity edits can be saved with the check button or the keyboard.
-document.querySelectorAll('.bag-quantity-input').forEach(input => {
-  input.addEventListener('keydown', event => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      input.form.requestSubmit();
-    }
+// Password visibility controls in the customer security panel.
+document.querySelectorAll('[data-profile-toggle]').forEach(button => {
+  button.addEventListener('click', () => {
+    const input = document.getElementById(button.dataset.profileToggle);
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    button.setAttribute('aria-pressed', String(show));
+    button.setAttribute('aria-label', `${show ? 'Hide' : 'Show'} ${input.name === 'current_password' ? 'current password' : input.name === 'confirm_password' ? 'password confirmation' : 'new password'}`);
+    button.querySelector('i').classList.toggle('fa-eye', !show);
+    button.querySelector('i').classList.toggle('fa-eye-slash', show);
   });
 });
 
-// Preserve the bag's position across its normal POST/redirect refreshes.
-const bagScrollKey = 'wanwan:bag-scroll';
-if (new URLSearchParams(location.search).get('route') === 'flowers/bag') {
-  try {
-    const saved = JSON.parse(sessionStorage.getItem(bagScrollKey) || 'null');
-    sessionStorage.removeItem(bagScrollKey);
-    if (saved && Number.isFinite(saved.y) && Date.now() - saved.at < 15000) {
-      const restoreBagPosition = () => window.scrollTo({ top: saved.y, behavior: 'instant' });
-      requestAnimationFrame(restoreBagPosition);
-      if (document.readyState !== 'complete') window.addEventListener('load', restoreBagPosition, { once: true });
-    }
-  } catch { /* Storage may be disabled; forms still work normally. */ }
-  document.querySelectorAll('.bag-row form').forEach(form => {
-    form.addEventListener('submit', () => {
-      try { sessionStorage.setItem(bagScrollKey, JSON.stringify({ y: window.scrollY, at: Date.now() })); } catch {}
-    });
-  });
-}
-
-// Inline checkout validation mirrors the server; it is never the authority.
-const customerCheckout = document.querySelector('#flower-checkout-form');
-if (customerCheckout) {
-  const validateCheckoutField = input => {
-    let message = '';
-    const value = input.value.trim();
-    if (input.required && !value) message = 'Please complete this field.';
-    else if (input.name === 'email' && input.validity.typeMismatch) message = 'Enter a valid email address.';
-    else if (input.name === 'phone' && !/^(?:\+63|0)9\d{9}$/.test(value.replace(/[\s()-]/g, ''))) message = 'Use 09XXXXXXXXX or +639XXXXXXXXX.';
-    else if (input.name === 'postal_code' && !/^\d{4}$/.test(value)) message = 'Enter a four-digit postal code.';
-    else if (!input.validity.valid) message = input.name === 'delivery_date' ? 'Choose a date within the available range.' : 'Please check this value.';
-    input.setAttribute('aria-invalid', String(Boolean(message)));
-    const error = document.querySelector(`#error-${input.name}`);
-    if (error) error.textContent = message;
-    return !message;
-  };
-  const fields = [...customerCheckout.querySelectorAll('input:not([type=hidden]),select')];
-  fields.forEach(field => {
-    field.addEventListener('blur', () => validateCheckoutField(field));
-    field.addEventListener('input', () => { if (field.getAttribute('aria-invalid') === 'true') validateCheckoutField(field); });
-    field.addEventListener('change', () => validateCheckoutField(field));
-  });
-  customerCheckout.addEventListener('submit', event => {
-    const results = fields.map(validateCheckoutField);
-    if (results.includes(false)) {
-      event.preventDefault();
-      fields[results.indexOf(false)].focus();
-    } else {
-      customerCheckout.querySelector('[type=submit]').disabled = true;
-    }
-  });
-}
-const placeForm = document.querySelector('#flower-place-form');
-placeForm?.querySelectorAll('[name=payment_method]').forEach(input => input.addEventListener('change', () => {
-  const qr = input.value === 'qrph';
-  document.querySelector('#qr-fee-note').hidden = !qr;
-  document.querySelector('#place-button-label').textContent = qr ? 'Place order & pay with QR Ph' : 'Place order · Cash on delivery';
-}));
-placeForm?.addEventListener('submit', () => { placeForm.querySelector('[type=submit]').disabled = true; });
-window.addEventListener('pageshow', () => {
-  customerCheckout?.querySelector('[type=submit]')?.removeAttribute('disabled');
-  placeForm?.querySelector('[type=submit]')?.removeAttribute('disabled');
-});
-
-// Cascading PSGC choices use the same local snapshot as server validation.
-document.querySelectorAll('[data-psgc-address]').forEach(group => {
-  const levels = ['region', 'province', 'city', 'barangay'];
-  const selects = levels.map(level => group.querySelector(`[data-address-level="${level}"]`));
-  const status = group.querySelector('.psgc-address-status');
-  const retry = group.querySelector('.psgc-retry');
-  const cache = new Map();
-  let revision = 0;
-  let failedLevel = null;
-  const clearFrom = index => {
-    for (let i = index; i < selects.length; i++) {
-      selects[i].replaceChildren(new Option(`Select ${levels[i] === 'city' ? 'city / municipality' : levels[i]}`, ''));
-      selects[i].disabled = true;
-    }
-  };
-  async function loadNext(index) {
-    const currentRevision = ++revision;
-    clearFrom(index);
-    failedLevel = index;
-    retry.hidden = true;
-    if (!selects[index - 1].value) { status.textContent = ''; return; }
-    const params = new URLSearchParams({ level: ['regions','provinces','cities','barangays'][index] });
-    params.set('parent', index === 1 ? selects[0].value : index === 2 ? selects[0].value : selects[2].value);
-    if (index === 2) params.set('province', selects[1].value);
-    const url = `${group.dataset.endpoint}?${params}`;
-    status.textContent = 'Loading address choices…';
-    group.setAttribute('aria-busy', 'true');
-    try {
-      let options = cache.get(url);
-      if (!options) {
-        const response = await fetch(url, { headers: { Accept: 'application/json' } });
-        if (!response.ok) throw new Error('Unavailable');
-        options = await response.json();
-        if (!Array.isArray(options)) throw new Error('Invalid address response');
-        cache.set(url, options);
-      }
-      if (currentRevision !== revision) return;
-      options.forEach(option => selects[index].add(new Option(option.name, option.code)));
-      selects[index].disabled = false;
-      status.textContent = options.length ? '' : 'No address choices found. Try another selection.';
-      failedLevel = null;
-      if (index === 1 && options.length === 1 && options[0].code === 'none') {
-        selects[index].value = 'none';
-        await loadNext(2);
-      }
-    } catch {
-      if (currentRevision !== revision) return;
-      status.textContent = 'Could not load address choices. Please retry.';
-      retry.hidden = false;
-    } finally {
-      if (currentRevision === revision) group.removeAttribute('aria-busy');
-    }
-  }
-  selects.forEach((select, index) => {
-    if (index > 0 && !selects[index - 1].value) select.disabled = true;
-    if (index < 3) select.addEventListener('change', () => loadNext(index + 1));
-  });
-  retry.addEventListener('click', () => { if (failedLevel !== null) loadNext(failedLevel); });
-});
+// Print only when the customer chooses to print their receipt.
+document.querySelector('[data-print-receipt]')?.addEventListener('click', () => window.print());

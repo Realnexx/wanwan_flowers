@@ -1,6 +1,6 @@
 <?php
 $flowerRoute = $_GET['route'] ?? 'home';
-if (is_string($flowerRoute) && in_array($flowerRoute, ['home', 'products', 'pricing', 'about', 'contact', 'branches', 'flowers/detail', 'flowers/bag', 'flowers/checkout', 'flowers/place-order', 'flowers/order', 'customer/home', 'customer/orders', 'customer/history', 'customer/profile'], true) && !isset($_GET['init'])) {
+if (is_string($flowerRoute) && in_array($flowerRoute, ['home', 'products', 'pricing', 'about', 'contact', 'branches', 'flowers/detail', 'flowers/bag', 'flowers/checkout', 'flowers/place-order', 'flowers/order', 'customer/home', 'customer/orders', 'customer/history', 'customer/profile', 'customer/receipt'], true) && !isset($_GET['init'])) {
     require __DIR__ . '/views/website/flowers.php';
     exit;
 }
